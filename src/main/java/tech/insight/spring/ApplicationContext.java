@@ -24,14 +24,11 @@ public class ApplicationContext {
     }
 
     public void initContext(String packageName) throws IOException {
-        scanPackage(packageName).stream().filter(this::scanCreate).map(this::wrapper).forEach(this::creatBean);
+        scanPackage(packageName).stream().filter(this::scanCreate).map(this::wrapper).forEach(this::createBean);
     }
 
-    protected BeanDefination wrapper(Class<?> type){
-        return new BeanDefination(type);
-    }
 
-    protected void creatBean(BeanDefination bd){
+    protected void createBean(BeanDefination bd){
         String name = bd.getName();
         if(ioc.containsKey(name)){
             return;
@@ -80,16 +77,27 @@ public class ApplicationContext {
         return type.isAnnotationPresent(Component.class);
     }
 
+    protected BeanDefination wrapper(Class<?> type){
+        return new BeanDefination(type);
+    }
+
     public Object getBean(String name){
-        return null;
+        return this.ioc.get(name);
     }
 
     public <T> T getBean(Class<T> beanType){
-        return null;
+        return this.ioc.values().stream()
+                .filter(bean->beanType.isAssignableFrom(bean.getClass()))
+                .map(bean->(T)bean)
+                .findAny()
+                .orElse(null);
     }
 
     public <T> List<T> getBeans(Class<T> beanType){
-        return null;
+        return this.ioc.values().stream()
+                .filter(bean->beanType.isAssignableFrom(bean.getClass()))
+                .map(bean->(T)bean)
+                .toList();
     }
 
 
