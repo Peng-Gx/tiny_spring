@@ -1,19 +1,30 @@
 package tech.insight.spring;
 
+import java.io.File;
+import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.net.URL;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class ApplicationContext {
 
-    public ApplicationContext(String packageName){
+    private Map<String, Object> ioc = new HashMap<>();
+
+    public ApplicationContext(String packageName) throws IOException {
         initContext(packageName);
     }
 
-    public void initContext(String packageName){
+    public void initContext(String packageName) throws IOException {
         scanPackage(packageName).stream().filter(this::scanCreate).map(this::wrapper).forEach(this::creatBean);
-    }
-
-    protected boolean scanCreate(Class<?> type){
-        return type.isAnnotationPresent(Component.class);
     }
 
     protected BeanDefination wrapper(Class<?> type){
@@ -21,11 +32,52 @@ public class ApplicationContext {
     }
 
     protected void creatBean(BeanDefination bd){
-
+        String name = bd.getName();
+        if(ioc.containsKey(name)){
+            return;
+        }
+        doCreateBean(bd);
     }
 
-    private List<Class<?>> scanPackage(String packageName){
-        return null;
+    private void doCreateBean(BeanDefination bd){
+        Constructor<?> constructor = bd.getConstructor();
+        Object bean=null;
+        try {
+            bean = constructor.newInstance();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        ioc.put(bd.getName(), bean);
+    }
+
+    private List<Class<?>> scanPackage(String packageName) throws IOException {
+
+        List<Class<?>> list=new ArrayList<>();
+
+        URL resource = ApplicationContext.class.getClassLoader().getResource(packageName.replace(".", "/"));
+        Path path = Path.of(resource.getFile().substring(1));
+        Files.walkFileTree(path, new SimpleFileVisitor<>(){
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                Path absolutePath = file.toAbsolutePath();
+                if(absolutePath.toString().endsWith(".class")){
+                    String replace = absolutePath.toString().replace(File.separator, ".");
+                    int i = replace.indexOf(packageName);
+                    String className = replace.substring(i, replace.length() - ".class".length());
+                    try {
+                        list.add(Class.forName(className));
+                    } catch (ClassNotFoundException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+                return FileVisitResult.CONTINUE;
+            }
+        });
+        return list;
+    }
+
+    protected boolean scanCreate(Class<?> type){
+        return type.isAnnotationPresent(Component.class);
     }
 
     public Object getBean(String name){
