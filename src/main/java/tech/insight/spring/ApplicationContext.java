@@ -17,7 +17,9 @@ import java.util.Map;
 
 public class ApplicationContext {
 
+
     private Map<String, Object> ioc = new HashMap<>();
+    private Map<String, BeanDefination> beanDefinationMap = new HashMap<>();
 
     public ApplicationContext(String packageName) throws IOException {
         initContext(packageName);
@@ -78,7 +80,13 @@ public class ApplicationContext {
     }
 
     protected BeanDefination wrapper(Class<?> type){
-        return new BeanDefination(type);
+        BeanDefination beanDefination = new BeanDefination(type);
+        if(beanDefinationMap.containsKey(beanDefination.getName())){
+            throw new RuntimeException("bean名字重复");
+        }
+
+        beanDefinationMap.put(beanDefination.getName(), beanDefination);
+        return beanDefination;
     }
 
     public Object getBean(String name){
