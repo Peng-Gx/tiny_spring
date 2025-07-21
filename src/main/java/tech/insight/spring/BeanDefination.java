@@ -1,6 +1,10 @@
 package tech.insight.spring;
 
+import tech.insight.spring.sub.PostConstruct;
+
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.util.Arrays;
 
 /**
  * @author penggaofeng
@@ -10,6 +14,7 @@ public class BeanDefination {
 
     private String name;
     private Constructor<?> constructor;
+    private Method postConstruct;
 
     // 通过类对象拿到构建bean所需要的信息
     public BeanDefination(Class<?> type){
@@ -20,6 +25,7 @@ public class BeanDefination {
         this.name = declaredAnnotation.name().isEmpty()?type.getSimpleName(): declaredAnnotation.name();
         try {
             this.constructor = type.getConstructor();
+            this.postConstruct = Arrays.stream(type.getMethods()).filter(method -> method.isAnnotationPresent(PostConstruct.class)).findAny().orElse(null);
         } catch (NoSuchMethodException e) {
             throw new RuntimeException(e);
         }
@@ -32,5 +38,9 @@ public class BeanDefination {
 
     public Constructor<?> getConstructor(){
         return constructor;
+    }
+
+    public Method getPostConstruct(){
+        return postConstruct;
     }
 }
