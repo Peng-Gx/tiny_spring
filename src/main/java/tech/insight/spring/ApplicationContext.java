@@ -3,6 +3,7 @@ package tech.insight.spring;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
@@ -27,31 +28,55 @@ public class ApplicationContext {
     }
 
     public void initContext(String packageName) throws IOException {
-        scanPackage(packageName).stream().filter(this::scanCreate).map(this::wrapper).forEach(this::createBean);
+        scanPackage(packageName).stream().filter(this::scanCreate).forEach(this::wrapper);
+        beanDefinationMap.values().stream().map(this::printBd).forEach(this::createBean);
     }
 
+    private BeanDefination printBd(BeanDefination bd){
+        System.out.println(bd.getName());
+        return bd;
+    }
 
-    protected void createBean(BeanDefination bd){
+    protected Object createBean(BeanDefination bd){
         String name = bd.getName();
         if(ioc.containsKey(name)){
-            return;
+            return ioc.get(name);
         }
-        doCreateBean(bd);
+        Object bean = doCreateBean(bd);
+        return bean;
     }
 
-    private void doCreateBean(BeanDefination bd){
+    private Object doCreateBean(BeanDefination bd){
         Constructor<?> constructor = bd.getConstructor();
         Object bean=null;
         try {
             bean = constructor.newInstance();
+            autowiredBean(bean,bd);
             Method postConstruct = bd.getPostConstruct();
             if(postConstruct!=null){
                 postConstruct.invoke(bean);
             }
+            ioc.put(bd.getName(), bean);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        ioc.put(bd.getName(), bean);
+        return bean;
+    }
+
+    private void autowiredBean(Object bean, BeanDefination bd) throws IllegalAccessException {
+        for (Field autowiredField : bd.getAutowiredFields()) {
+            autowiredField.setAccessible(true);
+            Object value = getBean(autowiredField.getClass());
+            if(value==null){
+                BeanDefination bdtemp = beanDefinationMap.values().stream()
+                        .filter(b->autowiredField.getType().isAssignableFrom(b.getBeanType()))
+                        .findAny().orElse(null);
+                if(bdtemp!=null){
+                    value = createBean(bdtemp);
+                }
+            }
+            autowiredField.set(bean, value);
+        }
     }
 
     private List<Class<?>> scanPackage(String packageName) throws IOException {
@@ -112,8 +137,5 @@ public class ApplicationContext {
                 .map(bean->(T)bean)
                 .toList();
     }
-
-
-
 
 }
