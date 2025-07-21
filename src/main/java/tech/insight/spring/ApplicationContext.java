@@ -23,6 +23,7 @@ public class ApplicationContext {
     private Map<String, Object> ioc = new HashMap<>();
     private Map<String, BeanDefination> beanDefinationMap = new HashMap<>();
     private Map<String, Object> loadingIoc = new HashMap<>();
+    private List<BeanPostProcessor> beanPostProcessors = new ArrayList<>();
 
     public ApplicationContext(String packageName) throws IOException {
         initContext(packageName);
@@ -30,7 +31,16 @@ public class ApplicationContext {
 
     public void initContext(String packageName) throws IOException {
         scanPackage(packageName).stream().filter(this::scanCreate).forEach(this::wrapper);
+        initBeanPostProcessors();
         beanDefinationMap.values().stream().forEach(this::createBean);
+    }
+
+    private void initBeanPostProcessors() {
+        beanDefinationMap.values().stream()
+                .filter(bd-> BeanPostProcessor.class.isAssignableFrom(bd.getBeanType()))
+                .map(this::createBean)
+                .map(bean->(BeanPostProcessor)bean)
+                .forEach(b->beanPostProcessors.add(b));
     }
 
 
@@ -50,14 +60,29 @@ public class ApplicationContext {
             bean = constructor.newInstance();
             loadingIoc.put(bd.getName(),bean);
             autowiredBean(bean,bd);
-            Method postConstruct = bd.getPostConstruct();
-            if(postConstruct!=null){
-                postConstruct.invoke(bean);
-            }
-            ioc.put(bd.getName(), loadingIoc.remove(bd.getName()));
+            bean = initialization(bean, bd);
+            loadingIoc.remove(bd.getName());
+            ioc.put(bd.getName(), bean);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+        return bean;
+    }
+
+    private Object initialization(Object bean, BeanDefination bd) throws InvocationTargetException, IllegalAccessException {
+        for (BeanPostProcessor beanPostProcessor : beanPostProcessors) {
+            bean = beanPostProcessor.beforeInitializeBean(bean, bd.getName());
+        }
+
+        Method postConstruct = bd.getPostConstruct();
+        if(postConstruct!=null){
+            postConstruct.invoke(bean);
+        }
+
+        for (BeanPostProcessor beanPostProcessor : beanPostProcessors) {
+            bean = beanPostProcessor.afterInitializeBean(bean, bd.getName());
+        }
+
         return bean;
     }
 
