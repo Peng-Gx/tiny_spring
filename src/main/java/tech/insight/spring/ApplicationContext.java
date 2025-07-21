@@ -22,6 +22,7 @@ public class ApplicationContext {
 
     private Map<String, Object> ioc = new HashMap<>();
     private Map<String, BeanDefination> beanDefinationMap = new HashMap<>();
+    private Map<String, Object> loadingIoc = new HashMap<>();
 
     public ApplicationContext(String packageName) throws IOException {
         initContext(packageName);
@@ -29,13 +30,9 @@ public class ApplicationContext {
 
     public void initContext(String packageName) throws IOException {
         scanPackage(packageName).stream().filter(this::scanCreate).forEach(this::wrapper);
-        beanDefinationMap.values().stream().map(this::printBd).forEach(this::createBean);
+        beanDefinationMap.values().stream().forEach(this::createBean);
     }
 
-    private BeanDefination printBd(BeanDefination bd){
-        System.out.println(bd.getName());
-        return bd;
-    }
 
     protected Object createBean(BeanDefination bd){
         String name = bd.getName();
@@ -51,12 +48,13 @@ public class ApplicationContext {
         Object bean=null;
         try {
             bean = constructor.newInstance();
+            loadingIoc.put(bd.getName(),bean);
             autowiredBean(bean,bd);
             Method postConstruct = bd.getPostConstruct();
             if(postConstruct!=null){
                 postConstruct.invoke(bean);
             }
-            ioc.put(bd.getName(), bean);
+            ioc.put(bd.getName(), loadingIoc.remove(bd.getName()));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -72,7 +70,11 @@ public class ApplicationContext {
                         .filter(b->autowiredField.getType().isAssignableFrom(b.getBeanType()))
                         .findAny().orElse(null);
                 if(bdtemp!=null){
-                    value = createBean(bdtemp);
+                    if(loadingIoc.containsKey(bdtemp.getName())){
+                        value=loadingIoc.get(bdtemp.getName());
+                    }else{
+                        value = doCreateBean(bdtemp);
+                    }
                 }
             }
             autowiredField.set(bean, value);
@@ -130,6 +132,7 @@ public class ApplicationContext {
                 .findAny()
                 .orElse(null);
     }
+
 
     public <T> List<T> getBeans(Class<T> beanType){
         return this.ioc.values().stream()
